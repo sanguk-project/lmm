@@ -31,5 +31,5 @@ def copy_images(source_path, num_copies=3000):
 
 if __name__ == "__main__":
     # 사용자가 지정한 원본 이미지 경로
-    source_path = "/mnt/ssd/1/sanguk/lmm/clip_interrogator/datasets/nia/test/images/nia_stable_diffusion_test.png"
+    source_path = "/mnt/ssd/1/sanguk/lmm/clip_interrogator/datasets/nia/test/images/nia_stable_diffusion_test.jpg"
     copy_images(source_path)
