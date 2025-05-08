@@ -40,63 +40,92 @@ def load_weights(model:torch.nn.Module,checkpoint:dict,strict:bool=False):
         model.load_state_dict(clean_state_dict(checkpoint), strict=strict)
 
 
-def load_model(model_config, use_lora: bool = False, device: str = "cuda", strict: bool = False):
-    args = SLConfig.fromfile(model_config.config_path)
-    args.device = device
-    model = build_model(args)
+def load_model(model_config, model_weights=None, use_lora: bool = False, device: str = "cuda", strict: bool = False):
+    """
+    Grounding DINO 모델을 로드합니다.
     
-    if use_lora:
-        # Load base weights
-        base_ckpt = torch.load(model_config.weights_path, map_location="cpu")
-        load_weights(model, base_ckpt, strict=False)
-        print(f"Adding Lora to Model!")
-        model = add_lora_to_model(model) # transforms the model to `PeftModel` object
-        lora_ckpt = torch.load(model_config.lora_weigths, map_location="cpu")
-        # Rename LoRA checkpoint keys
-        print("Renaming LoRA checkpoint keys to match model structure")
-        lora_ckpt_state_dict = clean_state_dict(lora_ckpt["model"]) if "model" in lora_ckpt else clean_state_dict(lora_ckpt)
-        new_lora_ckpt_state_dict = {}
-        # Get modules_to_save from the model
-        modules_to_save = []
-        if hasattr(model, "peft_config") and "default" in model.peft_config:
-            modules_to_save = model.peft_config["default"].modules_to_save
-        # We have to rename the saved lora weights to the one in the lora model, kind of ugly mabe there is a better way    
-        for key, value in lora_ckpt_state_dict.items():
-            new_key = key.replace(".lora_A.weight", ".lora_A.default.weight").replace(".lora_B.weight", ".lora_B.default.weight")
-            # Handle modules_to_save
-            for module_name in modules_to_save:
-                if module_name in key:
-                    new_key = new_key.replace(".weight", ".original_module.weight").replace(".bias", ".original_module.bias")
-            new_lora_ckpt_state_dict[new_key] = value
+    Args:
+        model_config: ModelConfig 객체 또는 설정 파일 경로(str)
+        model_weights: 가중치 파일 경로(str). model_config가 문자열일 때 필수
+        use_lora: LoRA 가중치 사용 여부
+        device: 모델 로드 장치
+        strict: 가중치 로드 시 strict 옵션
         
-        print("Checking if all lora checkpoint keys exist in the model.")
-        model_state_dict = model.state_dict()
+    Returns:
+        로드된 모델
+    """
+    # 문자열 경로를 직접 처리
+    if isinstance(model_config, str):
+        config_path = model_config
+        args = SLConfig.fromfile(config_path)
+        model = build_model(args)
         
-        missing_keys = []
-        for key in new_lora_ckpt_state_dict.keys():
-            if key not in model_state_dict:
-                missing_keys.append(key)
-
-        if len(missing_keys) > 0:
-            print(f"ERROR: The following LoRA checkpoint keys are missing in the model state dict:")
-            for missing_key in missing_keys:
-                print(f" - {missing_key}")
-            raise Exception("Lora Checkpoint keys missing from model")
+        if use_lora:
+            raise ValueError("Lora는 ModelConfig 객체가 필요합니다.")
         else:
-             print("All lora checkpoint keys exist in the model state dict!!")
-        
-        if "model" in lora_ckpt:
-            lora_ckpt["model"] = new_lora_ckpt_state_dict
-        else:
-            lora_ckpt = new_lora_ckpt_state_dict
-        load_weights(model, lora_ckpt, strict =False) 
-        print("Merging LoRA weights with base model")
-        model = model.merge_and_unload()
+            # 문자열 config_path를 사용할 때는 model_weights 인자 필요
+            if model_weights is None:
+                raise ValueError("config_path를 문자열로 제공할 때는 model_weights도 필요합니다.")
+            
+            base_ckpt = torch.load(model_weights, map_location="cpu")
+            load_weights(model, base_ckpt, strict=strict)
     else:
-        base_ckpt = torch.load(model_config.weights_path, map_location="cpu")
-        load_weights(model, base_ckpt, strict=strict)
+        # 기존 ModelConfig 객체 처리
+        args = SLConfig.fromfile(model_config.config_path)
+        model = build_model(args)
         
-    return model
+        if use_lora:
+            # Load base weights
+            base_ckpt = torch.load(model_config.weights_path, map_location="cpu")
+            load_weights(model, base_ckpt, strict=False)
+            print(f"Adding Lora to Model!")
+            model = add_lora_to_model(model) # transforms the model to `PeftModel` object
+            lora_ckpt = torch.load(model_config.lora_weigths, map_location="cpu")
+            # Rename LoRA checkpoint keys
+            print("Renaming LoRA checkpoint keys to match model structure")
+            lora_ckpt_state_dict = clean_state_dict(lora_ckpt["model"]) if "model" in lora_ckpt else clean_state_dict(lora_ckpt)
+            new_lora_ckpt_state_dict = {}
+            # Get modules_to_save from the model
+            modules_to_save = []
+            if hasattr(model, "peft_config") and "default" in model.peft_config:
+                modules_to_save = model.peft_config["default"].modules_to_save
+            # We have to rename the saved lora weights to the one in the lora model, kind of ugly mabe there is a better way    
+            for key, value in lora_ckpt_state_dict.items():
+                new_key = key.replace(".lora_A.weight", ".lora_A.default.weight").replace(".lora_B.weight", ".lora_B.default.weight")
+                # Handle modules_to_save
+                for module_name in modules_to_save:
+                    if module_name in key:
+                        new_key = new_key.replace(".weight", ".original_module.weight").replace(".bias", ".original_module.bias")
+                new_lora_ckpt_state_dict[new_key] = value
+            
+            print("Checking if all lora checkpoint keys exist in the model.")
+            model_state_dict = model.state_dict()
+            
+            missing_keys = []
+            for key in new_lora_ckpt_state_dict.keys():
+                if key not in model_state_dict:
+                    missing_keys.append(key)
+
+            if len(missing_keys) > 0:
+                print(f"ERROR: The following LoRA checkpoint keys are missing in the model state dict:")
+                for missing_key in missing_keys:
+                    print(f" - {missing_key}")
+                raise Exception("Lora Checkpoint keys missing from model")
+            else:
+                 print("All lora checkpoint keys exist in the model state dict!!")
+            
+            if "model" in lora_ckpt:
+                lora_ckpt["model"] = new_lora_ckpt_state_dict
+            else:
+                lora_ckpt = new_lora_ckpt_state_dict
+            load_weights(model, lora_ckpt, strict =False) 
+            print("Merging LoRA weights with base model")
+            model = model.merge_and_unload()
+        else:
+            base_ckpt = torch.load(model_config.weights_path, map_location="cpu")
+            load_weights(model, base_ckpt, strict=strict)
+    
+    return model.to(device)
 
 def load_image(image_path: str) -> Tuple[np.array, torch.Tensor]:
     transform = T.Compose(
@@ -119,17 +148,16 @@ class GroundingDINOVisualizer:
         self.save_dir = save_dir
         self.visualize_frequency = visualize_frequency
         self.pred_annotator = sv.BoxAnnotator(
-            color=sv.Color.red(),
+            color=sv.Color.RED,
             thickness=8,
-            text_scale=0.8,
-            text_padding=3
+            color_lookup=sv.ColorLookup.INDEX
         )
         self.gt_annotator = sv.BoxAnnotator(
-            color=sv.Color.green(),
+            color=sv.Color.GREEN,
             thickness=2,
-            text_scale=0.8,
-            text_padding=3
+            color_lookup=sv.ColorLookup.INDEX
         )
+        self.label_annotator = sv.LabelAnnotator()
 
     def extract_phrases(self, logits, tokenized, tokenizer, text_threshold=0.2):
         """Extract phrases from logits using tokenizer
@@ -197,22 +225,55 @@ class GroundingDINOVisualizer:
                     boxes = filtered_boxes * torch.tensor([w, h, w, h])
                     xyxy = box_cxcywh_to_xyxy(boxes).numpy()
                     
-                    detections = sv.Detections(xyxy=xyxy)
+                    # 최신 supervision 버전에 맞게 수정
+                    detections = sv.Detections(
+                        xyxy=xyxy,
+                        class_id=np.zeros(len(xyxy), dtype=int),
+                        confidence=filtered_logits.max(dim=1)[0].numpy()
+                    )
+                    
+                    # 레이블 리스트 생성
+                    labels = [phrases[i] if i < len(phrases) else "" for i in range(len(detections))]
+                    
                     img_bgr = self.pred_annotator.annotate(
                         scene=img_bgr,
+                        detections=detections
+                    )
+                    img_bgr = self.label_annotator.annotate(
+                        scene=img_bgr,
                         detections=detections,
-                        labels=phrases
+                        labels=labels
                     )
 
                 # Draw ground truth
                 if "boxes" in targets[0]:
                     gt_xyxy = box_cxcywh_to_xyxy(targets[0]["boxes"]).cpu().numpy()
-                    gt_detections = sv.Detections(xyxy=gt_xyxy)
-                    img_bgr = self.gt_annotator.annotate(
-                        scene=img_bgr,
-                        detections=gt_detections,
-                        labels=targets[0].get("str_cls_lst", None)
+                    gt_detections = sv.Detections(
+                        xyxy=gt_xyxy,
+                        class_id=np.zeros(len(gt_xyxy), dtype=int)
                     )
+                    
+                    # 최신 supervision 버전에 맞게 수정
+                    if "str_cls_lst" in targets[0]:
+                        labels = targets[0]["str_cls_lst"]
+                        
+                        # 레이블 리스트 생성
+                        gt_labels = [labels[i] if i < len(labels) else "" for i in range(len(gt_detections))]
+                        
+                        img_bgr = self.gt_annotator.annotate(
+                            scene=img_bgr,
+                            detections=gt_detections
+                        )
+                        img_bgr = self.label_annotator.annotate(
+                            scene=img_bgr,
+                            detections=gt_detections,
+                            labels=gt_labels
+                        )
+                    else:
+                        img_bgr = self.gt_annotator.annotate(
+                            scene=img_bgr,
+                            detections=gt_detections
+                        )
 
                 cv2.imwrite(f"{save_dir}/val_pred_{idx}.jpg", img_bgr)
                 if idx >= self.visualize_frequency:
@@ -256,11 +317,24 @@ class GroundingDINOVisualizer:
                 boxes = filtered_boxes * torch.tensor([w, h, w, h])
                 xyxy = box_cxcywh_to_xyxy(boxes).numpy()
                 
-                detections = sv.Detections(xyxy=xyxy)
+                # 최신 supervision 버전에 맞게 수정
+                detections = sv.Detections(
+                    xyxy=xyxy,
+                    class_id=np.zeros(len(xyxy), dtype=int),
+                    confidence=filtered_logits.max(dim=1)[0].numpy()
+                )
+                
+                # 레이블 리스트 생성
+                labels = [phrases[i] if i < len(phrases) else "" for i in range(len(detections))]
+                
                 img_bgr = self.pred_annotator.annotate(
                     scene=img_bgr,
+                    detections=detections
+                )
+                img_bgr = self.label_annotator.annotate(
+                    scene=img_bgr,
                     detections=detections,
-                    labels=phrases
+                    labels=labels
                 )
                 cv2.imwrite(f"{save_dir}/{fname}.jpg", img_bgr)
             else:
@@ -318,17 +392,27 @@ def annotate(image_source: np.ndarray, boxes: torch.Tensor, logits: torch.Tensor
     h, w, _ = image_source.shape
     boxes = boxes * torch.Tensor([w, h, w, h])
     xyxy = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy").numpy()
-    detections = sv.Detections(xyxy=xyxy)
+    detections = sv.Detections(
+        xyxy=xyxy,
+        class_id=np.zeros(len(xyxy), dtype=int),
+        confidence=logits.numpy()
+    )
 
-    labels = [
-        f"{phrase} {logit:.2f}"
-        for phrase, logit
-        in zip(phrases, logits)
-    ]
+    # 레이블 리스트 생성
+    formatted_labels = [f"{phrases[i]} {logits[i]:.2f}" if i < len(phrases) and i < len(logits) else "" for i in range(len(detections))]
 
     box_annotator = sv.BoxAnnotator()
+    label_annotator = sv.LabelAnnotator()
     annotated_frame = cv2.cvtColor(image_source, cv2.COLOR_RGB2BGR)
-    annotated_frame = box_annotator.annotate(scene=annotated_frame, detections=detections, labels=labels)
+    annotated_frame = box_annotator.annotate(
+        scene=annotated_frame, 
+        detections=detections
+    )
+    annotated_frame = label_annotator.annotate(
+        scene=annotated_frame,
+        detections=detections,
+        labels=formatted_labels
+    )
     return annotated_frame
 
 
@@ -349,7 +433,7 @@ class Model:
             model_config_path=model_config_path,
             model_checkpoint_path=model_checkpoint_path,
             device=device
-        ).to(device)
+        )
         self.device = device
 
     def predict_with_caption(
@@ -365,7 +449,7 @@ class Model:
         image = cv2.imread(IMAGE_PATH)
 
         model = Model(model_config_path=CONFIG_PATH, model_checkpoint_path=WEIGHTS_PATH)
-        detections, labels = model.predict_with_caption(
+        detections, phrases = model.predict_with_caption(
             image=image,
             caption=caption,
             box_threshold=BOX_THRESHOLD,
@@ -375,7 +459,18 @@ class Model:
         import supervision as sv
 
         box_annotator = sv.BoxAnnotator()
-        annotated_image = box_annotator.annotate(scene=image, detections=detections, labels=labels)
+        
+        # 레이블 포맷터 생성
+        def label_formatter(scene, detection_idx):
+            if detection_idx < len(phrases):
+                return phrases[detection_idx]
+            return ""
+        
+        annotated_image = box_annotator.annotate(
+            scene=image, 
+            detections=detections, 
+            label_formatter=label_formatter
+        )
         """
         processed_image = Model.preprocess_image(image_bgr=image).to(self.device)
         boxes, logits, phrases = predict(
@@ -413,11 +508,22 @@ class Model:
             text_threshold=TEXT_THRESHOLD
         )
 
-
         import supervision as sv
 
         box_annotator = sv.BoxAnnotator()
-        annotated_image = box_annotator.annotate(scene=image, detections=detections)
+        
+        # 클래스 이름을 레이블로 사용하는 포맷터
+        def label_formatter(scene, detection_idx):
+            class_id = detections.class_id[detection_idx]
+            if class_id is not None and class_id < len(CLASSES):
+                return CLASSES[class_id]
+            return ""
+            
+        annotated_image = box_annotator.annotate(
+            scene=image, 
+            detections=detections,
+            label_formatter=label_formatter
+        )
         """
         caption = ". ".join(classes)
         processed_image = Model.preprocess_image(image_bgr=image).to(self.device)

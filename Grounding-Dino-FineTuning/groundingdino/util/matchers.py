@@ -66,7 +66,13 @@ class HungarianMatcher(nn.Module):
             #t_boxes = box_xyxy_to_cxcywh(t["boxes"]) / scale_fct
             t_boxes = t["boxes"] / scale_fct
             tgt_boxes_list.append(t_boxes)
-            token_span=[t['cat2tokenspan'][cls] for cls in t['str_cls_lst']]
+            token_span = []
+            for cls in t['str_cls_lst']:
+                if cls in t['cat2tokenspan']:
+                    token_span.append(t['cat2tokenspan'][cls])
+                else:
+                    # 클래스를 찾지 못한 경우 기본 토큰 스팬 사용
+                    token_span.append([[0, 1]])  # 기본 토큰 스팬
             token_spans.append(token_span)
             
         tgt_bbox = torch.cat(tgt_boxes_list)

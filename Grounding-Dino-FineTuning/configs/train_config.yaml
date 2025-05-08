@@ -1,8 +1,8 @@
 data:
-  train_dir: "multimodal-data/fashion_dataset_subset/images/train"
-  train_ann: "multimodal-data/fashion_dataset_subset/train_annotations.csv"
-  val_dir: "multimodal-data/fashion_dataset_subset/images/val"
-  val_ann: "multimodal-data/fashion_dataset_subset/val_annotations.csv"
+  train_dir: "datasets/panasia/train/images"
+  train_ann: "datasets/panasia/train/train_annotations.csv"
+  val_dir: "datasets/panasia/test/images"
+  val_ann: "datasets/panasia/test/test_annotations.csv"
   batch_size: 4
   num_workers: 8
 
@@ -11,9 +11,9 @@ model:
   weights_path: "weights/groundingdino_swint_ogc.pth"
 
 training:
-  num_epochs: 200
+  num_epochs: 10
   learning_rate: 1e-3
-  save_dir: "weights"
+  save_dir: "weights/panasia"
   save_frequency: 5
   warmup_epochs: 5
   use_lora: true

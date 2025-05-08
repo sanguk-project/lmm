@@ -158,6 +158,13 @@ class GroundingDINOTrainer:
         if isinstance(images, (list, tuple)):
             images = nested_tensor_from_tensor_list(images)  # Convert list to NestedTensor
         images = images.to(self.device)
+        
+        # 학습 중에는 이미지에 requires_grad=True 설정
+        if self.model.training:
+            if hasattr(images, 'tensors'):
+                images.tensors.requires_grad_(True)
+            else:
+                images.requires_grad_(True)
 
         captions=[]
         for target in targets:

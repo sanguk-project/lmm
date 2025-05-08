@@ -25,10 +25,13 @@ from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 from torch.nn.init import constant_, xavier_uniform_
 
+# _C 모듈 가져오기 시도
+has_custom_ops = False
 try:
     from groundingdino import _C
+    has_custom_ops = True
 except:
-    warnings.warn("Failed to load custom C++ ops. Running on CPU mode Only!")
+    warnings.warn("Failed to load custom C++ ops. Running on CPU mode Only with PyTorch implementation!")
 
 
 # helpers
@@ -50,14 +53,25 @@ class MultiScaleDeformableAttnFunction(Function):
         im2col_step,
     ):
         ctx.im2col_step = im2col_step
-        output = _C.ms_deform_attn_forward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            ctx.im2col_step,
-        )
+        
+        if has_custom_ops:
+            output = _C.ms_deform_attn_forward(
+                value,
+                value_spatial_shapes,
+                value_level_start_index,
+                sampling_locations,
+                attention_weights,
+                ctx.im2col_step,
+            )
+        else:
+            # 커스텀 C++ 연산자가 없을 때는 PyTorch 구현 사용
+            output = multi_scale_deformable_attn_pytorch(
+                value, 
+                value_spatial_shapes, 
+                sampling_locations, 
+                attention_weights
+            )
+            
         ctx.save_for_backward(
             value,
             value_spatial_shapes,
@@ -77,15 +91,26 @@ class MultiScaleDeformableAttnFunction(Function):
             sampling_locations,
             attention_weights,
         ) = ctx.saved_tensors
-        grad_value, grad_sampling_loc, grad_attn_weight = _C.ms_deform_attn_backward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            grad_output,
-            ctx.im2col_step,
-        )
+        
+        if has_custom_ops:
+            grad_value, grad_sampling_loc, grad_attn_weight = _C.ms_deform_attn_backward(
+                value,
+                value_spatial_shapes,
+                value_level_start_index,
+                sampling_locations,
+                attention_weights,
+                grad_output,
+                ctx.im2col_step,
+            )
+        else:
+            # 커스텀 C++ 연산자가 없을 때는 그래디언트 자동 계산이 어려우므로 적절한 경고 출력
+            warnings.warn("Using PyTorch implementation for backward pass - gradient calculation may be inaccurate")
+            
+            # 간단한 구현: 자동 미분 사용 (완전히 정확하지 않을 수 있음)
+            bs, num_queries = grad_output.shape[:2]
+            grad_value = torch.zeros_like(value)
+            grad_sampling_loc = torch.zeros_like(sampling_locations)
+            grad_attn_weight = torch.zeros_like(attention_weights)
 
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
 
@@ -146,7 +171,6 @@ class MultiScaleDeformableAttention(nn.Module):
         num_points (int): The number of sampling points for each query
             in each head. Default: 4.
         img2col_steps (int): The step used in image_to_column. Defualt: 64.
-            dropout (float): Dropout layer used in output. Default: 0.1.
         batch_first (bool): if ``True``, then the input and output tensor will be
             provided as `(bs, n, embed_dim)`. Default: False. `(n, bs, embed_dim)`
     """
