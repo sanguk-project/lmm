@@ -1,5 +1,6 @@
 import json
 from tqdm import tqdm
+import os
 
 def replace_captions(input_jsonl_path, output_jsonl_path, fixed_caption):
     """
@@ -28,9 +29,9 @@ def replace_captions(input_jsonl_path, output_jsonl_path, fixed_caption):
                     continue
 
 if __name__ == "__main__":
-    # 경로 및 고정된 캡션 설정
-    input_jsonl_path = "/mnt/ssd/1/sanguk/lmm/clip_interrogator/datasets/captions/images_captions.jsonl"
-    output_jsonl_path = "/mnt/ssd/1/sanguk/lmm/clip_interrogator/datasets/captions/images_captions_ko.jsonl"
+    # 환경변수에서 경로를 가져오거나 기본값 사용
+    input_jsonl_path = os.getenv('INPUT_JSONL_PATH', "./datasets/captions/images_captions.jsonl")
+    output_jsonl_path = os.getenv('OUTPUT_JSONL_PATH', "./datasets/captions/images_captions_ko.jsonl")
     fixed_caption = (
         "가운데 나무가 있는 풍경화, 한국 아르누보 애니메이션 스타일, 티베트 문자 스크립트, "
         "밀밭, Kanō Hōgai에서 영감을 받은, 게임 내 스크린샷, Mark Schultz, "

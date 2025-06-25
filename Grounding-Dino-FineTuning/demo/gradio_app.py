@@ -121,5 +121,14 @@ if __name__ == "__main__":
                         input_image, grounding_caption, box_threshold, text_threshold], outputs=[gallery])
 
 
-    block.launch(server_name='0.0.0.0', server_port=7579, debug=args.debug, share=args.share)
+    # 보안 설정: 기본적으로 localhost에서만 접근 가능
+    server_name = os.getenv('GRADIO_SERVER_NAME', '127.0.0.1')  # 기본값을 localhost로 설정
+    server_port = int(os.getenv('GRADIO_SERVER_PORT', '7579'))  # 포트를 환경변수로 설정
+    
+    block.launch(
+        server_name=server_name, 
+        server_port=server_port, 
+        debug=args.debug, 
+        share=args.share
+    )
 

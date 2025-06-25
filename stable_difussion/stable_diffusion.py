@@ -13,6 +13,7 @@ import warnings
 import time
 import numpy as np
 from tabulate import tabulate
+import os
 
 # 경고 메시지 억제
 warnings.filterwarnings("ignore")
@@ -45,9 +46,13 @@ unet = UNet2DConditionModel.from_pretrained(model_id, subfolder="unet").to(devic
 scheduler = DDPMScheduler.from_pretrained(model_id, subfolder="scheduler")
 print("✅ 모델 로드 완료")
 
-# 데이터셋 로드 (JSONL 형식)
-print("📚 데이터셋 로드 중...")
-dataset = load_dataset("json", data_files="/mnt/ssd/1/sanguk/lmm/datasets/captions/test_captions_ko.jsonl", split="train")
+# 환경변수에서 데이터셋 경로 가져오기
+dataset_file_path = os.getenv('DATASET_FILE_PATH', "./datasets/captions/test_captions_ko.jsonl")
+
+if not os.path.exists(dataset_file_path):
+    raise FileNotFoundError(f"데이터셋 파일을 찾을 수 없습니다: {dataset_file_path}")
+
+dataset = load_dataset("json", data_files=dataset_file_path, split="train")
 
 def load_image(example):
     example["image"] = Image.open(example["file_path"])

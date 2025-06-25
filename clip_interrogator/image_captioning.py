@@ -1,15 +1,21 @@
 import json
 import time
+import os
 import torch
 from PIL import Image
 from clip_interrogator import Config, Interrogator
 import pathlib
 from tqdm import tqdm
 
-# 데이터셋 경로 정의
-dataset_path = pathlib.Path("/mnt/ssd/1/sanguk/lmm/clip_interrogator/datasets/nia/test/images")
-captions_path = pathlib.Path("/mnt/ssd/1/sanguk/lmm/clip_interrogator/datasets/captions")
+# 환경변수에서 경로를 가져오거나 기본값 사용
+dataset_path = pathlib.Path(os.getenv('DATASET_PATH', './datasets/nia/test/images'))
+captions_path = pathlib.Path(os.getenv('CAPTIONS_PATH', './datasets/captions'))
 image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff']
+
+# 디렉토리가 존재하지 않으면 생성
+dataset_path.mkdir(parents=True, exist_ok=True)
+captions_path.mkdir(parents=True, exist_ok=True)
+
 image_files = [f for f in dataset_path.glob("*") if f.suffix.lower() in image_extensions]
 
 # GPU 메모리 상태 확인
@@ -20,7 +26,7 @@ if torch.cuda.is_available():
 # CLIP Interrogator 설정
 config = Config(
     clip_model_name="ViT-L-14-quickgelu/openai",
-    device="cuda",  # GPU 메모리 부족 시 "cpu"로 변경
+    device="cuda" if torch.cuda.is_available() else "cpu",
     clip_model_path=None,
 )
 

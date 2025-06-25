@@ -42,7 +42,30 @@ clip_interrogator/cache/
 
 # 데이터셋
 datasets/
+clip_interrogator/datasets/
 
 # 로그
 logs/
-*.log 
+*.log
+
+# 보안 및 환경변수
+.env
+.env.local
+.env.production
+.env.test
+*.key
+*.pem
+*.crt
+*.p12
+config.local.*
+secrets.json
+
+# 개인 설정 파일
+*_local.*
+*_personal.*
+*_private.*
+
+# 임시 파일
+*.tmp
+*.temp
+*.bak 
